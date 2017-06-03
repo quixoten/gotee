@@ -9,25 +9,24 @@ import (
 )
 
 func main() {
-	var flagAppend bool
-	var filePath string
-	cmd := flag.NewFlagSet("gotee", flag.ExitOnError)
-	openFlags := os.O_WRONLY|os.O_CREATE|os.O_TRUNC
+	var cmdAppend bool
 
-	cmd.BoolVar(&flagAppend, "a", false, "Append to FILE. Do not overwrite.")
+	cmd := flag.NewFlagSet("gotee", flag.ExitOnError)
+	cmd.BoolVar(&cmdAppend, "a", false, "Append to FILE. Do not overwrite.")
 	cmd.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: gotee [options] FILE\n")
 		cmd.PrintDefaults()
 	}
 	cmd.Parse(os.Args[1:])
-	filePath = cmd.Arg(0)
 
+	filePath := cmd.Arg(0)
 	if filePath == "" {
 		cmd.Usage()
 		os.Exit(2)
 	}
 
-	if flagAppend {
+	openFlags := os.O_WRONLY|os.O_CREATE|os.O_TRUNC
+	if cmdAppend {
 		openFlags = os.O_WRONLY|os.O_CREATE|os.O_APPEND
 	}
 
