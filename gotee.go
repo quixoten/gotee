@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 )
 
 func main() {
@@ -38,35 +39,37 @@ func main() {
 
 	buffer := make([]byte, 4096)
 	writer := io.MultiWriter(file, os.Stdout)
-	tee := io.TeeReader(os.Stdin, writer)
-	var info1, info2 os.FileInfo
+	nextVanishCheck := time.Now().Add(5 * time.Second)
 
 	for {
-		info1, err = os.Stat(filePath)
-		info2, err = file.Stat()
-		if !os.SameFile(info1, info2) {
-			file.Close()
-			file, err = os.OpenFile(filePath, openFlags, 0666)
-			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				os.Exit(1)
-			}
-			writer = io.MultiWriter(file, os.Stdout)
-			tee = io.TeeReader(os.Stdin, writer)
-			fmt.Fprintln(os.Stderr, "log file re-opened")
-		}
-
-		_, err := tee.Read(buffer)
-		if err == nil {
-			continue
-		}
+		bytesRead, err := os.Stdin.Read(buffer)
 		if err == io.EOF {
 			break
 		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		now := time.Now()
+		if now.After(nextVanishCheck) {
+			nextVanishCheck = now.Add(5 * time.Second)
+			if _, err := os.Stat(filePath); err != nil {
+				file.Close()
+				file, err = os.OpenFile(filePath, openFlags, 0666)
+				if err != nil {
+					fmt.Fprintln(os.Stderr, err)
+					os.Exit(1)
+				}
+				writer = io.MultiWriter(file, os.Stdout)
+				fmt.Fprintln(os.Stderr, "log file re-opened")
+			}
+		}
+
+		_, err = writer.Write(buffer[:bytesRead])
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	}
-
-	file.Close()
 }
