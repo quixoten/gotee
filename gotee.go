@@ -14,7 +14,7 @@ func main() {
 	cmd := flag.NewFlagSet("gotee", flag.ExitOnError)
 	cmd.BoolVar(&cmdAppend, "a", false, "Append to FILE. Do not overwrite.")
 	cmd.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: gotee [options] FILE\n")
+		fmt.Fprintln(os.Stderr, "Usage: gotee [options] FILE")
 		cmd.PrintDefaults()
 	}
 	cmd.Parse(os.Args[1:])
@@ -25,9 +25,9 @@ func main() {
 		os.Exit(2)
 	}
 
-	openFlags := os.O_WRONLY|os.O_CREATE|os.O_TRUNC
+	openFlags := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
 	if cmdAppend {
-		openFlags = os.O_WRONLY|os.O_CREATE|os.O_APPEND
+		openFlags = os.O_WRONLY | os.O_CREATE | os.O_APPEND
 	}
 
 	file, err := os.OpenFile(filePath, openFlags, 0666)
