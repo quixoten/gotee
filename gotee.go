@@ -36,6 +36,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	openFileInfo, err := file.Stat()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
 	buffer := make([]byte, 4096)
 	writer := io.MultiWriter(file, os.Stdout)
 	nextVanishCheck := time.Now().Add(5 * time.Second)
@@ -53,9 +59,15 @@ func main() {
 		now := time.Now()
 		if now.After(nextVanishCheck) {
 			nextVanishCheck = now.Add(5 * time.Second)
-			if _, err := os.Stat(filePath); err != nil {
+			onDiskFileInfo, _ := os.Stat(filePath)
+			if !os.SameFile(openFileInfo, onDiskFileInfo) {
 				file.Close()
 				file, err = os.OpenFile(filePath, openFlags, 0666)
+				if err != nil {
+					fmt.Fprintln(os.Stderr, err)
+					os.Exit(1)
+				}
+				openFileInfo, err = file.Stat()
 				if err != nil {
 					fmt.Fprintln(os.Stderr, err)
 					os.Exit(1)
