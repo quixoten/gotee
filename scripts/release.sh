@@ -18,7 +18,13 @@ gox \
   -arch="${XC_ARCH}" \
   -output="pkg/{{.Dir}}_${version}_{{.OS}}_{{.Arch}}/gotee"
 
-ls -1 pkg | xargs -t -I{} zip -j pkg/{}.zip pkg/{}/gotee
+pushd pkg
+  for dir in $(ls -1 .); do
+    shafile="${dir}.sha"
+    zipfile="${dir}.zip"
+    zip -j "${zipfile}" "${dir}/gotee"
+    shasum -a 256 "${zipfile}" > "${shafile}"
+  done
+popd
 
-shasum -a 256 pkg/*.zip | sed 's: pkg/::' > pkg/${version}_sums.txt
-ghr -recreate -replace ${version} pkg
+ghr -recreate ${version} pkg
