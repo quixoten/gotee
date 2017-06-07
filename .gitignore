@@ -1,5 +1,5 @@
-# Project binary
-gotee
+# Build directory
+pkg
 
 # Binaries for programs and plugins
 *.exe
