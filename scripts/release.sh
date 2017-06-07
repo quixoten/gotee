@@ -16,7 +16,7 @@ rm -rf pkg/
 gox \
   -os="${XC_OS}" \
   -arch="${XC_ARCH}" \
-  -output="pkg/{{.Dir}}_${version}_{{.OS}}_{{.Arch}}/gotee"
+  -output="pkg/{{.Dir}}-${version}-{{.OS}}-{{.Arch}}/gotee"
 
 pushd pkg
   for dir in $(ls -1 .); do
