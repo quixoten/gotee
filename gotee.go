@@ -10,7 +10,7 @@ import (
 )
 
 var usage = `Gotee is a version of the tee program that re-opens its output file when it is
-moved or re-created by an external program, such as logrotate.
+moved, re-created, or deleted by an external program, such as logrotate.
 
 Usage:
   gotee [options] FILE
@@ -18,76 +18,91 @@ Usage:
 Options:
   -a           Append to FILE. Do not truncate on open/re-open.
   -i duration  Interval between checking for changes to FILE. Default is 5s.
+  -v           Show version and exit.
 `
 
-type Tee struct {
+type Cmd struct {
 	in            io.Reader
 	out           io.Writer
+	err           io.Writer
 	logger        *log.Logger
 	path          string
 	append        bool
 	checkInterval time.Duration
+	showVersion   bool
+	flags         *flag.FlagSet
 }
 
+var version = "0.0.1"
+
 func main() {
-	tee := &Tee{
-		in:            os.Stdin,
-		out:           os.Stdout,
-		logger:        log.New(os.Stderr, "gotee: ", log.LstdFlags),
-		append:        false,
-		checkInterval: 1 * time.Second,
+	cmd := New()
+
+	if err := cmd.Parse(os.Args[1:]); err != nil {
+		cmd.flags.Usage()
+		os.Exit(1)
 	}
 
-	cmd := flag.NewFlagSet("gotee", flag.ExitOnError)
-	cmd.BoolVar(&tee.append, "a", false, "Append to FILE. Do not overwrite.")
-	cmd.DurationVar(&tee.checkInterval, "i", 5*time.Second, "Interval between checks for changes to FILE.")
-	cmd.Usage = func() {
-		fmt.Fprintln(os.Stderr, usage)
-	}
-	cmd.Parse(os.Args[1:])
-
-	tee.path = cmd.Arg(0)
-	if tee.path == "" {
-		cmd.Usage()
-		os.Exit(2)
-	}
-
-	if err := tee.Run(); err != nil {
+	if err := cmd.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func (t *Tee) openFile() (file *os.File, info os.FileInfo, err error) {
-	openFlags := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
-	if t.append {
-		openFlags = os.O_WRONLY | os.O_CREATE | os.O_APPEND
+func New() (cmd *Cmd) {
+	cmd = &Cmd{
+		in:            os.Stdin,
+		out:           os.Stdout,
+		err:           os.Stderr,
+		path:          "",
+		append:        false,
+		checkInterval: 1 * time.Second,
+		showVersion:   false,
+		flags:         flag.NewFlagSet("gotee", flag.ContinueOnError),
 	}
 
-	file, err = os.OpenFile(t.path, openFlags, 0666)
-	if err != nil {
-		return
-	}
-	info, err = file.Stat()
-	if err != nil {
-		return
+	cmd.logger = log.New(cmd.err, "gotee: ", log.LstdFlags)
+	cmd.flags.BoolVar(&cmd.append, "a", false, "")
+	cmd.flags.DurationVar(&cmd.checkInterval, "i", 5*time.Second, "")
+	cmd.flags.BoolVar(&cmd.showVersion, "v", false, "")
+	cmd.flags.Usage = func() {
+		fmt.Fprintln(os.Stderr, usage)
 	}
 
-	return
+	return cmd
 }
 
-func (t *Tee) Run() error {
-	openFile, openFileInfo, err := t.openFile()
+func (cmd *Cmd) Parse(args []string) error {
+	if err := cmd.flags.Parse(args); err != nil {
+		return err
+	}
+
+	cmd.path = cmd.flags.Arg(0)
+
+	return nil
+}
+
+func (cmd *Cmd) Run() error {
+	if cmd.showVersion {
+		fmt.Fprintf(cmd.err, "gotee version %s\n", version)
+		return nil
+	}
+
+	if cmd.path == "" {
+		return fmt.Errorf("FILE not specified.\n\n%s\n", usage)
+	}
+
+	openFile, openFileInfo, err := cmd.openFile()
 	if err != nil {
 		return err
 	}
 
 	buffer := make([]byte, 4096)
-	writer := io.MultiWriter(openFile, t.out)
-	nextCheckForChanges := time.Now().Add(t.checkInterval)
+	writer := io.MultiWriter(openFile, cmd.out)
+	nextCheckForChanges := time.Now().Add(cmd.checkInterval)
 
 	for {
-		bytesRead, err := t.in.Read(buffer)
+		bytesRead, err := cmd.in.Read(buffer)
 		if err == io.EOF {
 			break
 		}
@@ -97,16 +112,16 @@ func (t *Tee) Run() error {
 
 		now := time.Now()
 		if now.After(nextCheckForChanges) {
-			nextCheckForChanges = now.Add(t.checkInterval)
-			onDiskFileInfo, _ := os.Stat(t.path)
+			nextCheckForChanges = now.Add(cmd.checkInterval)
+			onDiskFileInfo, _ := os.Stat(cmd.path)
 			if !os.SameFile(openFileInfo, onDiskFileInfo) {
 				openFile.Close()
-				openFile, openFileInfo, err = t.openFile()
+				openFile, openFileInfo, err = cmd.openFile()
 				if err != nil {
 					return err
 				}
-				writer = io.MultiWriter(openFile, t.out)
-				t.logger.Printf("re-opened output file '%s'\n", t.path)
+				writer = io.MultiWriter(openFile, cmd.out)
+				cmd.logger.Printf("re-opened output file '%s'\n", cmd.path)
 			}
 		}
 
@@ -117,4 +132,22 @@ func (t *Tee) Run() error {
 	}
 
 	return nil
+}
+
+func (cmd *Cmd) openFile() (file *os.File, info os.FileInfo, err error) {
+	openFlags := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+	if cmd.append {
+		openFlags = os.O_WRONLY | os.O_CREATE | os.O_APPEND
+	}
+
+	file, err = os.OpenFile(cmd.path, openFlags, 0666)
+	if err != nil {
+		return
+	}
+	info, err = file.Stat()
+	if err != nil {
+		return
+	}
+
+	return
 }
